@@ -246,8 +246,6 @@ st.markdown(
     .bar-bg { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; margin-top: 4px; }
     .bar-fill-red { height: 100%; background: #fb7185; border-radius: 4px; }
     .bar-fill-amber { height: 100%; background: #fbbf24; border-radius: 4px; }
-    /* Hide the auto-advance button */
-    .auto-advance-btn { display: none; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -355,29 +353,6 @@ with col_quiz:
             st.rerun()
 
     # ── Client-side auto-advance (no time.sleep, no screen darkening) ────
-    # Hidden button that JS will click after delay
-    auto_advance_container = st.container()
-    with auto_advance_container:
-        auto_clicked = st.button(
-            "auto_advance", key="auto_advance_btn", type="secondary"
-        )
-        if auto_clicked:
-            go_next()
-            st.rerun()
-
-    # Hide the auto-advance button with injected CSS
-    st.markdown(
-        """
-        <style>
-        /* Hide the auto-advance button by matching its text */
-        button[kind="secondary"]:has(p:only-child) {
-            display: none;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
     if st.session_state.advance_pending:
         delay_ms = 1300 if st.session_state.feedback_type == "correct" else 1700
         st.session_state.advance_pending = False
@@ -387,11 +362,18 @@ with col_quiz:
             (function() {{
                 setTimeout(function() {{
                     var doc = window.parent.document;
-                    var buttons = doc.querySelectorAll('button[kind="secondary"]');
-                    for (var i = 0; i < buttons.length; i++) {{
-                        if (buttons[i].textContent.trim() === 'auto_advance') {{
-                            buttons[i].click();
-                            break;
+                    // Find the hidden auto-advance input and trigger change
+                    var hiddenBtn = doc.getElementById('auto_advance_target');
+                    if (hiddenBtn) {{
+                        hiddenBtn.click();
+                    }} else {{
+                        // Fallback: find button by exact text
+                        var buttons = doc.querySelectorAll('button');
+                        for (var i = 0; i < buttons.length; i++) {{
+                            if (buttons[i].textContent.trim() === '⏭ 다음') {{
+                                buttons[i].click();
+                                break;
+                            }}
                         }}
                     }}
                 }}, {delay_ms});
@@ -400,6 +382,16 @@ with col_quiz:
             """,
             height=0,
         )
+
+    # Hidden auto-advance button (visually hidden, JS clickable)
+    st.markdown(
+        '<div style="height:0;overflow:hidden;margin:0;padding:0;">',
+        unsafe_allow_html=True,
+    )
+    if st.button("⏭ 다음", key="auto_advance_btn"):
+        go_next()
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ── Analysis Column ──────────────────────────────────────────────────────────
 with col_analysis:
