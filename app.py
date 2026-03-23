@@ -2,7 +2,6 @@
 
 import base64
 import random
-import time
 from io import BytesIO
 
 import streamlit as st
@@ -32,7 +31,7 @@ vocab = load_vocab(chapter=ACTIVE_CHAPTER)
 
 
 @st.cache_data(show_spinner=False, max_entries=200)
-def generate_tts(text: str) -> str:
+def generate_tts_b64(text: str) -> str:
     """Generate Japanese TTS audio, return as base64 string (cached)."""
     buf = BytesIO()
     tts = gTTS(text=text, lang="ja")
@@ -41,10 +40,18 @@ def generate_tts(text: str) -> str:
     return base64.b64encode(buf.read()).decode()
 
 
-def play_audio_hidden(b64_audio: str):
-    """Play audio via hidden HTML audio element (no visible player)."""
+def play_audio_js(b64_audio: str):
+    """Play audio using JavaScript Audio API (bypasses autoplay restrictions)."""
     components.html(
-        f'<audio autoplay><source src="data:audio/mp3;base64,{b64_audio}" type="audio/mp3"></audio>',
+        f"""
+        <script>
+        (function() {{
+            var audio = new Audio("data:audio/mp3;base64,{b64_audio}");
+            audio.volume = 1.0;
+            audio.play().catch(function(e) {{ console.log('audio play failed:', e); }});
+        }})();
+        </script>
+        """,
         height=0,
     )
 
@@ -104,9 +111,9 @@ def handle_choice(index: int):
     st.session_state.locked = True
     st.session_state.selected_index = index
 
-    # TTS: always play the correct answer word (base64 cached)
+    # TTS: always play the correct answer word
     try:
-        st.session_state.tts_audio = generate_tts(answer["jp"])
+        st.session_state.tts_audio = generate_tts_b64(answer["jp"])
     except Exception:
         st.session_state.tts_audio = None
 
@@ -189,22 +196,6 @@ def reset_quiz():
     st.session_state.current_choices = build_choices(answer, vocab)
 
 
-# ── Auto-advance: 피드백 표시 후 자동으로 다음 문제 ────────────────────────
-if st.session_state.advance_pending:
-    delay = 1.3 if st.session_state.feedback_type == "correct" else 1.7
-    time.sleep(delay)
-    go_next()
-    st.rerun()
-
-# ── On-demand TTS for clicked word ───────────────────────────────────────────
-if st.session_state.play_word:
-    try:
-        b64 = generate_tts(st.session_state.play_word)
-        play_audio_hidden(b64)
-    except Exception:
-        pass
-    st.session_state.play_word = None
-
 # ── Custom CSS ───────────────────────────────────────────────────────────────
 st.markdown(
     """
@@ -219,6 +210,30 @@ st.markdown(
     }
     .quiz-meaning .label { font-size: 0.85rem; color: #64748b; font-weight: 500; }
     .quiz-meaning .word { font-size: 2.2rem; font-weight: 700; color: #0f172a; margin-top: 0.5rem; }
+    .choice-card {
+        text-align: center;
+        padding: 1rem 0.5rem;
+        border-radius: 0.75rem;
+        border: 2px solid #e2e8f0;
+        font-size: 1.2rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+    .choice-correct {
+        background: #dcfce7;
+        border-color: #22c55e;
+        color: #15803d;
+    }
+    .choice-wrong {
+        background: #fee2e2;
+        border-color: #ef4444;
+        color: #b91c1c;
+    }
+    .choice-neutral {
+        background: #f1f5f9;
+        border-color: #cbd5e1;
+        color: #475569;
+    }
     .stat-card {
         text-align: center;
         padding: 0.75rem;
@@ -231,6 +246,8 @@ st.markdown(
     .bar-bg { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; margin-top: 4px; }
     .bar-fill-red { height: 100%; background: #fb7185; border-radius: 4px; }
     .bar-fill-amber { height: 100%; background: #fbbf24; border-radius: 4px; }
+    /* Hide the auto-advance button */
+    .auto-advance-btn { display: none; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -261,7 +278,7 @@ with col_quiz:
         unsafe_allow_html=True,
     )
 
-    # Choice buttons
+    # Choice area
     btn_cols = st.columns(3)
 
     for i, col in enumerate(btn_cols):
@@ -275,18 +292,25 @@ with col_quiz:
             )
 
             if st.session_state.locked:
+                # Show colored feedback cards (not buttons)
                 if is_correct_answer:
-                    if st.button(f"✅ {choice['jp']}", key=f"choice_{i}", use_container_width=True):
-                        st.session_state.play_word = choice["jp"]
-                        st.rerun()
+                    css_class = "choice-correct"
+                    label = f"✅ {choice['jp']}"
                 elif is_chosen_wrong:
-                    if st.button(f"❌ {choice['jp']}", key=f"choice_{i}", use_container_width=True):
-                        st.session_state.play_word = choice["jp"]
-                        st.rerun()
+                    css_class = "choice-wrong"
+                    label = f"❌ {choice['jp']}"
                 else:
-                    if st.button(f"🔊 {choice['jp']}", key=f"choice_{i}", use_container_width=True):
-                        st.session_state.play_word = choice["jp"]
-                        st.rerun()
+                    css_class = "choice-neutral"
+                    label = choice["jp"]
+
+                st.markdown(
+                    f'<div class="choice-card {css_class}">{label}</div>',
+                    unsafe_allow_html=True,
+                )
+                # Click-to-play button under each card
+                if st.button(f"🔊 발음", key=f"play_{i}", use_container_width=True):
+                    st.session_state.play_word = choice["jp"]
+                    st.rerun()
             else:
                 if st.button(
                     choice["jp"],
@@ -296,7 +320,7 @@ with col_quiz:
                     handle_choice(i)
                     st.rerun()
 
-    # Feedback
+    # Feedback text
     if st.session_state.feedback_type == "correct":
         st.success(st.session_state.feedback_text)
     elif st.session_state.feedback_type == "wrong":
@@ -304,10 +328,20 @@ with col_quiz:
     else:
         st.info("정답을 고르면 일본어 음성이 재생됩니다.")
 
-    # Hidden autoplay for correct answer TTS
+    # ── Audio playback ───────────────────────────────────────────────────
+    # 1) Auto-play correct answer TTS on answer
     if st.session_state.tts_audio:
-        play_audio_hidden(st.session_state.tts_audio)
+        play_audio_js(st.session_state.tts_audio)
         st.session_state.tts_audio = None
+
+    # 2) On-demand TTS for clicked word
+    if st.session_state.play_word:
+        try:
+            b64 = generate_tts_b64(st.session_state.play_word)
+            play_audio_js(b64)
+        except Exception:
+            pass
+        st.session_state.play_word = None
 
     # Navigation buttons
     nav1, nav2, _ = st.columns([1, 1, 2])
@@ -319,6 +353,53 @@ with col_quiz:
         if st.button("초기화", use_container_width=True):
             reset_quiz()
             st.rerun()
+
+    # ── Client-side auto-advance (no time.sleep, no screen darkening) ────
+    # Hidden button that JS will click after delay
+    auto_advance_container = st.container()
+    with auto_advance_container:
+        auto_clicked = st.button(
+            "auto_advance", key="auto_advance_btn", type="secondary"
+        )
+        if auto_clicked:
+            go_next()
+            st.rerun()
+
+    # Hide the auto-advance button with injected CSS
+    st.markdown(
+        """
+        <style>
+        /* Hide the auto-advance button by matching its text */
+        button[kind="secondary"]:has(p:only-child) {
+            display: none;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if st.session_state.advance_pending:
+        delay_ms = 1300 if st.session_state.feedback_type == "correct" else 1700
+        st.session_state.advance_pending = False
+        components.html(
+            f"""
+            <script>
+            (function() {{
+                setTimeout(function() {{
+                    var doc = window.parent.document;
+                    var buttons = doc.querySelectorAll('button[kind="secondary"]');
+                    for (var i = 0; i < buttons.length; i++) {{
+                        if (buttons[i].textContent.trim() === 'auto_advance') {{
+                            buttons[i].click();
+                            break;
+                        }}
+                    }}
+                }}, {delay_ms});
+            }})();
+            </script>
+            """,
+            height=0,
+        )
 
 # ── Analysis Column ──────────────────────────────────────────────────────────
 with col_analysis:
