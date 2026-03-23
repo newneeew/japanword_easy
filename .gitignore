@@ -1,0 +1,6 @@
+vocab.db
+__pycache__/
+*.pyc
+.streamlit/secrets.toml
+CLAUDE.md
+.claude/
