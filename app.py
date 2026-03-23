@@ -210,18 +210,22 @@ st.markdown(
     }
     .quiz-meaning .label { font-size: 0.85rem; color: #64748b; font-weight: 500; }
     .quiz-meaning .word { font-size: 2.2rem; font-weight: 700; color: #0f172a; margin-top: 0.5rem; }
-    /* Colored choice buttons via container class */
-    .choice-correct button {
+    /* Choice buttons: fixed height 130%, no layout shift */
+    div[data-testid="column"] button {
+        min-height: 3.9rem !important;
+        font-size: 1.1rem !important;
+    }
+    .choice-correct > div > button {
         background-color: #dcfce7 !important;
         border: 2px solid #22c55e !important;
         color: #15803d !important;
     }
-    .choice-wrong button {
+    .choice-wrong > div > button {
         background-color: #fee2e2 !important;
         border: 2px solid #ef4444 !important;
         color: #b91c1c !important;
     }
-    .choice-neutral button {
+    .choice-neutral > div > button {
         background-color: #f1f5f9 !important;
         border: 2px solid #cbd5e1 !important;
         color: #475569 !important;
@@ -281,26 +285,20 @@ with col_quiz:
                 and not choice["is_answer"]
             )
 
-            # Determine label and CSS wrapper class
-            if st.session_state.locked:
-                if is_correct_answer:
-                    css_class = "choice-correct"
-                    btn_label = f"✅ {choice['jp']}"
-                elif is_chosen_wrong:
-                    css_class = "choice-wrong"
-                    btn_label = f"❌ {choice['jp']}"
-                else:
-                    css_class = "choice-neutral"
-                    btn_label = choice["jp"]
+            # Always same structure: wrapper div + button with same label
+            if is_correct_answer:
+                css_class = "choice-correct"
+            elif is_chosen_wrong:
+                css_class = "choice-wrong"
+            elif st.session_state.locked:
+                css_class = "choice-neutral"
             else:
-                css_class = ""
-                btn_label = choice["jp"]
+                css_class = "choice-default"
 
-            # Wrap button in a div with the color class
-            if css_class:
-                st.markdown(f'<div class="{css_class}">', unsafe_allow_html=True)
-            if st.button(
-                btn_label,
+            wrapper = st.container()
+            wrapper.markdown(f'<div class="{css_class}">', unsafe_allow_html=True)
+            if wrapper.button(
+                choice["jp"],
                 key=f"choice_{i}",
                 disabled=st.session_state.locked,
                 use_container_width=True,
@@ -308,8 +306,7 @@ with col_quiz:
                 if not st.session_state.locked:
                     handle_choice(i)
                     st.rerun()
-            if css_class:
-                st.markdown("</div>", unsafe_allow_html=True)
+            wrapper.markdown("</div>", unsafe_allow_html=True)
 
     # Feedback text
     if st.session_state.feedback_type == "correct":
