@@ -210,29 +210,21 @@ st.markdown(
     }
     .quiz-meaning .label { font-size: 0.85rem; color: #64748b; font-weight: 500; }
     .quiz-meaning .word { font-size: 2.2rem; font-weight: 700; color: #0f172a; margin-top: 0.5rem; }
-    .choice-card {
-        text-align: center;
-        padding: 1rem 0.5rem;
-        border-radius: 0.75rem;
-        border: 2px solid #e2e8f0;
-        font-size: 1.2rem;
-        font-weight: 600;
-        margin-bottom: 0.5rem;
+    /* Colored choice buttons via container class */
+    .choice-correct button {
+        background-color: #dcfce7 !important;
+        border: 2px solid #22c55e !important;
+        color: #15803d !important;
     }
-    .choice-correct {
-        background: #dcfce7;
-        border-color: #22c55e;
-        color: #15803d;
+    .choice-wrong button {
+        background-color: #fee2e2 !important;
+        border: 2px solid #ef4444 !important;
+        color: #b91c1c !important;
     }
-    .choice-wrong {
-        background: #fee2e2;
-        border-color: #ef4444;
-        color: #b91c1c;
-    }
-    .choice-neutral {
-        background: #f1f5f9;
-        border-color: #cbd5e1;
-        color: #475569;
+    .choice-neutral button {
+        background-color: #f1f5f9 !important;
+        border: 2px solid #cbd5e1 !important;
+        color: #475569 !important;
     }
     .stat-card {
         text-align: center;
@@ -289,34 +281,35 @@ with col_quiz:
                 and not choice["is_answer"]
             )
 
+            # Determine label and CSS wrapper class
             if st.session_state.locked:
-                # Show colored feedback cards (not buttons)
                 if is_correct_answer:
                     css_class = "choice-correct"
-                    label = f"✅ {choice['jp']}"
+                    btn_label = f"✅ {choice['jp']}"
                 elif is_chosen_wrong:
                     css_class = "choice-wrong"
-                    label = f"❌ {choice['jp']}"
+                    btn_label = f"❌ {choice['jp']}"
                 else:
                     css_class = "choice-neutral"
-                    label = choice["jp"]
-
-                st.markdown(
-                    f'<div class="choice-card {css_class}">{label}</div>',
-                    unsafe_allow_html=True,
-                )
-                # Click-to-play button under each card
-                if st.button(f"🔊 발음", key=f"play_{i}", use_container_width=True):
-                    st.session_state.play_word = choice["jp"]
-                    st.rerun()
+                    btn_label = choice["jp"]
             else:
-                if st.button(
-                    choice["jp"],
-                    key=f"choice_{i}",
-                    use_container_width=True,
-                ):
+                css_class = ""
+                btn_label = choice["jp"]
+
+            # Wrap button in a div with the color class
+            if css_class:
+                st.markdown(f'<div class="{css_class}">', unsafe_allow_html=True)
+            if st.button(
+                btn_label,
+                key=f"choice_{i}",
+                disabled=st.session_state.locked,
+                use_container_width=True,
+            ):
+                if not st.session_state.locked:
                     handle_choice(i)
                     st.rerun()
+            if css_class:
+                st.markdown("</div>", unsafe_allow_html=True)
 
     # Feedback text
     if st.session_state.feedback_type == "correct":
