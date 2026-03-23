@@ -1,9 +1,12 @@
 """Japanese-Korean Vocabulary Quiz - Streamlit App."""
 
+import base64
 import random
+import time
 from io import BytesIO
 
 import streamlit as st
+import streamlit.components.v1 as components
 from gtts import gTTS
 
 from db import init_db, get_all_vocab
@@ -26,6 +29,7 @@ vocab = load_vocab()
 # ── TTS helper ───────────────────────────────────────────────────────────────
 
 
+@st.cache_data(show_spinner=False)
 def generate_tts(text: str) -> bytes:
     """Generate Japanese TTS audio as MP3 bytes."""
     buf = BytesIO()
@@ -33,6 +37,15 @@ def generate_tts(text: str) -> bytes:
     tts.write_to_fp(buf)
     buf.seek(0)
     return buf.read()
+
+
+def play_audio_hidden(audio_bytes: bytes):
+    """Play audio via hidden HTML audio element (no visible player)."""
+    b64 = base64.b64encode(audio_bytes).decode()
+    components.html(
+        f'<audio autoplay><source src="data:audio/mp3;base64,{b64}" type="audio/mp3"></audio>',
+        height=0,
+    )
 
 
 # ── Session state init ───────────────────────────────────────────────────────
@@ -60,6 +73,8 @@ def init_session_state():
         "current_answer": None,
         "current_choices": [],
         "tts_audio": None,
+        "advance_pending": False,
+        "play_word": None,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -88,9 +103,9 @@ def handle_choice(index: int):
     st.session_state.locked = True
     st.session_state.selected_index = index
 
-    # Generate TTS
+    # TTS: always play the correct answer word
     try:
-        st.session_state.tts_audio = generate_tts(choice["jp"])
+        st.session_state.tts_audio = generate_tts(answer["jp"])
     except Exception:
         st.session_state.tts_audio = None
 
@@ -129,6 +144,9 @@ def handle_choice(index: int):
             f"오답 · 정답은 {answer['jp']} ({answer['pron']})"
         )
 
+    st.session_state.advance_pending = True
+    st.session_state.play_word = None
+
 
 def go_next():
     """Advance to next question."""
@@ -144,6 +162,8 @@ def go_next():
     st.session_state.feedback_type = ""
     st.session_state.feedback_text = ""
     st.session_state.tts_audio = None
+    st.session_state.advance_pending = False
+    st.session_state.play_word = None
 
 
 def reset_quiz():
@@ -162,9 +182,27 @@ def reset_quiz():
     st.session_state.feedback_type = ""
     st.session_state.feedback_text = ""
     st.session_state.tts_audio = None
+    st.session_state.advance_pending = False
+    st.session_state.play_word = None
     st.session_state.current_answer = answer
     st.session_state.current_choices = build_choices(answer, vocab)
 
+
+# ── Auto-advance: 피드백 표시 후 자동으로 다음 문제 ────────────────────────
+if st.session_state.advance_pending:
+    delay = 1.3 if st.session_state.feedback_type == "correct" else 1.7
+    time.sleep(delay)
+    go_next()
+    st.rerun()
+
+# ── On-demand TTS for clicked word ───────────────────────────────────────────
+if st.session_state.play_word:
+    try:
+        audio = generate_tts(st.session_state.play_word)
+        play_audio_hidden(audio)
+    except Exception:
+        pass
+    st.session_state.play_word = None
 
 # ── Custom CSS ───────────────────────────────────────────────────────────────
 st.markdown(
@@ -223,8 +261,6 @@ with col_quiz:
     )
 
     # Choice buttons
-    positions = ["왼쪽", "가운데", "오른쪽"]
-    arrows = ["←", "↑", "→"]
     btn_cols = st.columns(3)
 
     for i, col in enumerate(btn_cols):
@@ -237,21 +273,19 @@ with col_quiz:
                 and not choice["is_answer"]
             )
 
-            # Button label
-            label = f"{positions[i]}  {arrows[i]}\n\n**{choice['jp']}**"
-
             if st.session_state.locked:
                 if is_correct_answer:
-                    st.success(f"✓ {choice['jp']}", icon="✅")
+                    if st.button(f"✅ {choice['jp']}", key=f"choice_{i}", use_container_width=True):
+                        st.session_state.play_word = choice["jp"]
+                        st.rerun()
                 elif is_chosen_wrong:
-                    st.error(f"✗ {choice['jp']}", icon="❌")
+                    if st.button(f"❌ {choice['jp']}", key=f"choice_{i}", use_container_width=True):
+                        st.session_state.play_word = choice["jp"]
+                        st.rerun()
                 else:
-                    st.button(
-                        choice["jp"],
-                        key=f"choice_{i}",
-                        disabled=True,
-                        use_container_width=True,
-                    )
+                    if st.button(f"🔊 {choice['jp']}", key=f"choice_{i}", use_container_width=True):
+                        st.session_state.play_word = choice["jp"]
+                        st.rerun()
             else:
                 if st.button(
                     choice["jp"],
@@ -269,9 +303,10 @@ with col_quiz:
     else:
         st.info("정답을 고르면 일본어 음성이 재생됩니다.")
 
-    # TTS audio
+    # Hidden autoplay for answer TTS
     if st.session_state.tts_audio:
-        st.audio(st.session_state.tts_audio, format="audio/mp3", autoplay=True)
+        play_audio_hidden(st.session_state.tts_audio)
+        st.session_state.tts_audio = None
 
     # Navigation buttons
     nav1, nav2, _ = st.columns([1, 1, 2])
