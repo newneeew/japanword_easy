@@ -18,32 +18,33 @@ st.set_page_config(page_title="일본어 단어 퀴즈", page_icon="🇯🇵", l
 # ── DB init & vocab load ─────────────────────────────────────────────────────
 init_db()
 
+ACTIVE_CHAPTER = "ch_12"
+
 
 @st.cache_data
-def load_vocab():
-    return get_all_vocab()
+def load_vocab(chapter=None):
+    return get_all_vocab(chapter=chapter)
 
 
-vocab = load_vocab()
+vocab = load_vocab(chapter=ACTIVE_CHAPTER)
 
 # ── TTS helper ───────────────────────────────────────────────────────────────
 
 
-@st.cache_data(show_spinner=False)
-def generate_tts(text: str) -> bytes:
-    """Generate Japanese TTS audio as MP3 bytes."""
+@st.cache_data(show_spinner=False, max_entries=200)
+def generate_tts(text: str) -> str:
+    """Generate Japanese TTS audio, return as base64 string (cached)."""
     buf = BytesIO()
     tts = gTTS(text=text, lang="ja")
     tts.write_to_fp(buf)
     buf.seek(0)
-    return buf.read()
+    return base64.b64encode(buf.read()).decode()
 
 
-def play_audio_hidden(audio_bytes: bytes):
+def play_audio_hidden(b64_audio: str):
     """Play audio via hidden HTML audio element (no visible player)."""
-    b64 = base64.b64encode(audio_bytes).decode()
     components.html(
-        f'<audio autoplay><source src="data:audio/mp3;base64,{b64}" type="audio/mp3"></audio>',
+        f'<audio autoplay><source src="data:audio/mp3;base64,{b64_audio}" type="audio/mp3"></audio>',
         height=0,
     )
 
@@ -103,7 +104,7 @@ def handle_choice(index: int):
     st.session_state.locked = True
     st.session_state.selected_index = index
 
-    # TTS: always play the correct answer word
+    # TTS: always play the correct answer word (base64 cached)
     try:
         st.session_state.tts_audio = generate_tts(answer["jp"])
     except Exception:
@@ -198,8 +199,8 @@ if st.session_state.advance_pending:
 # ── On-demand TTS for clicked word ───────────────────────────────────────────
 if st.session_state.play_word:
     try:
-        audio = generate_tts(st.session_state.play_word)
-        play_audio_hidden(audio)
+        b64 = generate_tts(st.session_state.play_word)
+        play_audio_hidden(b64)
     except Exception:
         pass
     st.session_state.play_word = None
@@ -303,7 +304,7 @@ with col_quiz:
     else:
         st.info("정답을 고르면 일본어 음성이 재생됩니다.")
 
-    # Hidden autoplay for answer TTS
+    # Hidden autoplay for correct answer TTS
     if st.session_state.tts_audio:
         play_audio_hidden(st.session_state.tts_audio)
         st.session_state.tts_audio = None

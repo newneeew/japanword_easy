@@ -11,29 +11,40 @@ import db
 
 def test_init_and_get_vocab():
     """Test DB initialization and vocab retrieval."""
-    # Use temp DB
     original_path = db.DB_PATH
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db.DB_PATH = f.name
 
     try:
         db.init_db()
-        vocab = db.get_all_vocab()
 
-        assert len(vocab) == 44, f"Expected 44 items, got {len(vocab)}"
-        assert all(isinstance(v, dict) for v in vocab)
-        assert all("id" in v and "jp" in v and "ko" in v and "pron" in v for v in vocab)
+        # Total: 44 default + 32 ch_12 = 76
+        vocab_all = db.get_all_vocab()
+        assert len(vocab_all) == 76, f"Expected 76 items, got {len(vocab_all)}"
 
-        # Check a specific item
-        totemo = [v for v in vocab if v["jp"] == "とても"]
-        assert len(totemo) == 1
-        assert totemo[0]["ko"] == "매우"
-        assert totemo[0]["pron"] == "토테모"
+        # Filter by chapter
+        vocab_default = db.get_all_vocab(chapter="default")
+        assert len(vocab_default) == 44, f"Expected 44 default items, got {len(vocab_default)}"
 
-        # Test idempotency - calling init_db again should not duplicate
+        vocab_ch12 = db.get_all_vocab(chapter="ch_12")
+        assert len(vocab_ch12) == 32, f"Expected 32 ch_12 items, got {len(vocab_ch12)}"
+
+        # Check chapter field
+        assert all(v["chapter"] == "ch_12" for v in vocab_ch12)
+
+        # Check a specific ch_12 item
+        suru = [v for v in vocab_ch12 if v["jp"] == "する"]
+        assert len(suru) == 1
+        assert suru[0]["ko"] == "하다"
+
+        # Chapters list
+        chapters = db.get_chapters()
+        assert "default" in chapters
+        assert "ch_12" in chapters
+
+        # Idempotency
         db.init_db()
-        vocab2 = db.get_all_vocab()
-        assert len(vocab2) == 44
+        assert len(db.get_all_vocab()) == 76
     finally:
         db.DB_PATH = original_path
         os.unlink(f.name)
