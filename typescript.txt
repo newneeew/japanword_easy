@@ -1,0 +1,481 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+
+const rawVocabGroups = [
+  [
+    { jp: "とても", ko: "매우", pron: "토테모" },
+    { jp: "まち", ko: "거리", pron: "마치" },
+    { jp: "うた", ko: "노래", pron: "우타" },
+    { jp: "あまり", ko: "그다지 / 별로", pron: "아마리" },
+    { jp: "すきだ", ko: "좋아하다", pron: "스키다" },
+    { jp: "きらいだ", ko: "싫어하다", pron: "키라이다" },
+    { jp: "じょうずだ", ko: "잘하다 / 능숙하다", pron: "조오즈다" },
+    { jp: "へただ", ko: "잘 못하다 / 서투르다", pron: "헤타다" },
+    { jp: "べんりだ", ko: "편리하다", pron: "벤리다" },
+    { jp: "ふべんだ", ko: "불편하다", pron: "후벤다" },
+    { jp: "しずかだ", ko: "조용하다", pron: "시즈카다" },
+    { jp: "にぎやかだ", ko: "번화하다", pron: "니기야카다" },
+    { jp: "しんせつだ", ko: "친절하다", pron: "신세츠다" },
+    { jp: "まじめだ", ko: "성실하다", pron: "마지메다" },
+    { jp: "げんきだ", ko: "건강하다", pron: "겐키다" },
+    { jp: "じょうぶだ", ko: "튼튼하다", pron: "죠오부다" },
+    { jp: "きれいだ", ko: "깨끗하다 / 예쁘다", pron: "키레이다" },
+    { jp: "ハンサムだ", ko: "핸섬하다", pron: "한사무다" },
+    { jp: "ゆうめいだ", ko: "유명하다", pron: "유우메이다" },
+    { jp: "かんたんだ", ko: "간단하다", pron: "칸탄다" },
+    { jp: "ひまだ", ko: "한가하다", pron: "히마다" },
+    { jp: "りっぱだ", ko: "훌륭하다", pron: "립파다" },
+    { jp: "しんせんだ", ko: "신선하다", pron: "신센다" },
+    { jp: "たいへんだ", ko: "힘들다", pron: "타이헨다" },
+    { jp: "あさ7じにおきる", ko: "아침 7시에 일어나다", pron: "아사 시치지 니 오키루" },
+    { jp: "ごはんをたべる", ko: "밥을 먹다", pron: "고항오 타베루" },
+    { jp: "ちかてつにのる", ko: "지하철을 타다", pron: "치카테츠 니 노루" },
+    { jp: "がっこうへいく", ko: "학교에 가다", pron: "각코오 에 이쿠" },
+    { jp: "べんきょうをする", ko: "공부를 하다", pron: "벤쿄오 오 스루" },
+    { jp: "せんせいとはなす", ko: "선생님과 이야기하다", pron: "센세이 토 하나스" },
+    { jp: "としょかんにくる", ko: "도서관에 오다", pron: "토쇼칸 니 쿠루" },
+    { jp: "れぽーとをかく", ko: "리포트를 쓰다", pron: "레포오토 오 카쿠" },
+    { jp: "ほんをよむ", ko: "책을 읽다", pron: "혼 오 요무" },
+    { jp: "でんわをかける", ko: "전화를 걸다", pron: "덴와 오 카케루" },
+    { jp: "こいびとにあう", ko: "애인을 만나다", pron: "코이비토 니 아우" },
+    { jp: "かばんをかう", ko: "가방을 사다", pron: "카반 오 카우" },
+    { jp: "ともだちとあそぶ", ko: "친구와 놀다", pron: "토모다치 토 아소부" },
+    { jp: "おさけをのむ", ko: "술을 마시다", pron: "오사케 오 노무" },
+    { jp: "おんがくをきく", ko: "음악을 듣다", pron: "온가쿠 오 키쿠" },
+    { jp: "うたをうたう", ko: "노래를 부르다", pron: "우타 오 우타우" },
+    { jp: "うちへかえる", ko: "집에 돌아오다", pron: "우치 에 카에루" },
+    { jp: "てれびをみる", ko: "텔레비전을 보다", pron: "테레비 오 미루" },
+    { jp: "おふろにはいる", ko: "목욕을 하다", pron: "오후로 니 하이루" },
+    { jp: "よるおそくねる", ko: "밤 늦게 자다", pron: "요루 오소쿠 네루" }
+  ]
+];
+
+function shuffle(arr) {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+function normalizeGroups(groups) {
+  const flat = groups.flat();
+  const map = new Map();
+
+  flat.forEach((item) => {
+    const key = `${item.jp}__${item.ko}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        id: key,
+        jp: item.jp,
+        ko: item.ko,
+        pron: item.pron ?? "",
+      });
+    }
+  });
+
+  return Array.from(map.values());
+}
+
+const vocab = normalizeGroups(rawVocabGroups);
+
+function speakJapanese(text) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window) || !text) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "ja-JP";
+  utterance.rate = 0.9;
+  utterance.pitch = 1;
+  const voices = window.speechSynthesis.getVoices();
+  const jaVoice = voices.find((voice) => voice.lang?.toLowerCase().startsWith("ja"));
+  if (jaVoice) utterance.voice = jaVoice;
+  window.speechSynthesis.speak(utterance);
+}
+
+function buildChoices(answer, pool) {
+  const wrongChoices = shuffle(pool.filter((item) => item.id !== answer.id)).slice(0, 2);
+  return shuffle([
+    { ...answer, isAnswer: true },
+    ...wrongChoices.map((item) => ({ ...item, isAnswer: false })),
+  ]);
+}
+
+function pickNextQuestion(pool, recentIds, wrongQueue) {
+  const prioritizedWrong = wrongQueue
+    .map((id) => pool.find((item) => item.id === id))
+    .filter(Boolean);
+
+  const freshPool = pool.filter((item) => !recentIds.includes(item.id));
+  const freshWrong = prioritizedWrong.filter((item) => !recentIds.includes(item.id));
+
+  if (freshWrong.length > 0) return freshWrong[0];
+  if (prioritizedWrong.length > 0) return prioritizedWrong[0];
+  if (freshPool.length > 0) return freshPool[Math.floor(Math.random() * freshPool.length)];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+export default function JapaneseQuizApp() {
+  const [questionCount, setQuestionCount] = useState(1);
+  const [correct, setCorrect] = useState(0);
+  const [wrong, setWrong] = useState(0);
+  const [locked, setLocked] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(null);
+  const [recentIds, setRecentIds] = useState([]);
+  const [wrongQueue, setWrongQueue] = useState([]);
+  const [feedback, setFeedback] = useState({ type: "", text: "" });
+  const [attemptStats, setAttemptStats] = useState({});
+  const [wrongStats, setWrongStats] = useState({});
+  const [confusionStats, setConfusionStats] = useState({});
+  const timerRef = useRef(null);
+  const buttonRefs = useRef([]);
+
+  const [current, setCurrent] = useState(() => {
+    const answer = vocab[Math.floor(Math.random() * vocab.length)];
+    return { answer, choices: buildChoices(answer, vocab) };
+  });
+
+  const choicePositions = useMemo(() => ["왼쪽", "가운데", "오른쪽"], []);
+
+  const analysis = useMemo(() => {
+    const entries = vocab.map((item) => {
+      const attempts = attemptStats[item.id] ?? 0;
+      const wrongCount = wrongStats[item.id] ?? 0;
+      const accuracy = attempts > 0 ? Math.round(((attempts - wrongCount) / attempts) * 100) : null;
+      return {
+        ...item,
+        attempts,
+        wrongCount,
+        accuracy,
+      };
+    });
+
+    const attemptedEntries = entries.filter((item) => item.attempts > 0);
+    const difficultWords = [...attemptedEntries]
+      .filter((item) => item.wrongCount > 0 && item.accuracy !== 100)
+      .sort((a, b) => {
+        if (b.wrongCount !== a.wrongCount) return b.wrongCount - a.wrongCount;
+        if (a.accuracy !== b.accuracy) return (a.accuracy ?? 101) - (b.accuracy ?? 101);
+        return b.attempts - a.attempts;
+      })
+      .slice(0, 5);
+
+    const confusionPairs = Object.entries(confusionStats)
+      .map(([key, count]) => {
+        const [answerId, pickedId] = key.split("|||");
+        const answer = vocab.find((item) => item.id === answerId);
+        const picked = vocab.find((item) => item.id === pickedId);
+        if (!answer || !picked) return null;
+        return { key, count, answer, picked };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    const totalAttempts = attemptedEntries.reduce((sum, item) => sum + item.attempts, 0);
+    const totalWrong = attemptedEntries.reduce((sum, item) => sum + item.wrongCount, 0);
+    const overallAccuracy = totalAttempts > 0 ? Math.round(((totalAttempts - totalWrong) / totalAttempts) * 100) : null;
+
+    return {
+      attemptedCount: attemptedEntries.length,
+      totalAttempts,
+      overallAccuracy,
+      difficultWords,
+      confusionPairs,
+    };
+  }, [attemptStats, wrongStats, confusionStats]);
+
+  const goNext = (nextWrongQueue = wrongQueue, nextRecentIds = recentIds) => {
+    window.clearTimeout(timerRef.current);
+    const answer = pickNextQuestion(vocab, nextRecentIds, nextWrongQueue);
+    const choices = buildChoices(answer, vocab);
+    setCurrent({ answer, choices });
+    setLocked(false);
+    setSelectedIndex(null);
+    setFeedback({ type: "", text: "" });
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (locked) return;
+      const keyMap = {
+        ArrowLeft: 0,
+        ArrowUp: 1,
+        ArrowRight: 2,
+      };
+      const index = keyMap[event.key];
+      if (index === undefined) return;
+      event.preventDefault();
+      const choice = current.choices[index];
+      if (choice) handleChoice(choice, index);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [current, locked, wrongQueue, recentIds]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.getVoices();
+    }
+    return () => {
+      window.clearTimeout(timerRef.current);
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (buttonRefs.current[1]) buttonRefs.current[1].focus();
+  }, [current]);
+
+  function handleChoice(choice, index) {
+    if (locked) return;
+    setLocked(true);
+    setSelectedIndex(index);
+    speakJapanese(choice.jp);
+
+    const updatedRecentIds = [...recentIds.filter((id) => id !== current.answer.id), current.answer.id].slice(-12);
+    setRecentIds(updatedRecentIds);
+    setAttemptStats((prev) => ({
+      ...prev,
+      [current.answer.id]: (prev[current.answer.id] ?? 0) + 1,
+    }));
+
+    if (choice.isAnswer) {
+      const nextWrongQueue = wrongQueue.filter((id) => id !== current.answer.id);
+      setCorrect((prev) => prev + 1);
+      setWrongQueue(nextWrongQueue);
+      setFeedback({
+        type: "correct",
+        text: `정답 · ${current.answer.jp} (${current.answer.pron})`,
+      });
+      timerRef.current = window.setTimeout(() => {
+        setQuestionCount((prev) => prev + 1);
+        goNext(nextWrongQueue, updatedRecentIds);
+      }, 1300);
+      return;
+    }
+
+    const nextWrongQueue = [current.answer.id, ...wrongQueue.filter((id) => id !== current.answer.id)].slice(0, 25);
+    setWrong((prev) => prev + 1);
+    setWrongQueue(nextWrongQueue);
+    setWrongStats((prev) => ({
+      ...prev,
+      [current.answer.id]: (prev[current.answer.id] ?? 0) + 1,
+    }));
+    setConfusionStats((prev) => {
+      const pairKey = `${current.answer.id}|||${choice.id}`;
+      return {
+        ...prev,
+        [pairKey]: (prev[pairKey] ?? 0) + 1,
+      };
+    });
+    setFeedback({
+      type: "wrong",
+      text: `오답 · 정답은 ${current.answer.jp} (${current.answer.pron})`,
+    });
+    timerRef.current = window.setTimeout(() => {
+      setQuestionCount((prev) => prev + 1);
+      goNext(nextWrongQueue, updatedRecentIds);
+    }, 1700);
+  }
+
+  function resetQuiz() {
+    window.clearTimeout(timerRef.current);
+    const answer = vocab[Math.floor(Math.random() * vocab.length)];
+    setQuestionCount(1);
+    setCorrect(0);
+    setWrong(0);
+    setLocked(false);
+    setSelectedIndex(null);
+    setRecentIds([]);
+    setWrongQueue([]);
+    setAttemptStats({});
+    setWrongStats({});
+    setConfusionStats({});
+    setFeedback({ type: "", text: "" });
+    setCurrent({ answer, choices: buildChoices(answer, vocab) });
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-100 p-4 md:p-8">
+      <div className="mx-auto max-w-5xl rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+        <div className="border-b border-slate-200 bg-slate-50 px-6 py-5">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">일본어 단어 퀴즈</h1>
+          <p className="mt-2 text-sm md:text-base text-slate-600">
+            업로드한 단어 DB를 반영했습니다. 방향키는 왼쪽=첫 번째, 위=가운데, 오른쪽=세 번째입니다.
+          </p>
+        </div>
+
+        <div className="grid gap-6 p-6 md:grid-cols-[1.1fr_0.9fr]">
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 md:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+              <div>문제 {questionCount}</div>
+              <div className="flex gap-4">
+                <span>정답 {correct}</span>
+                <span>오답 {wrong}</span>
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-3xl bg-slate-50 px-5 py-8 text-center border border-slate-200">
+              <div className="text-sm font-medium text-slate-500">뜻</div>
+              <div className="mt-3 text-3xl md:text-4xl font-bold tracking-tight text-slate-900">
+                {current.answer.ko}
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-3 md:grid-cols-3">
+              {current.choices.map((choice, index) => {
+                const isCorrectAnswer = locked && choice.isAnswer;
+                const isChosenWrong = locked && selectedIndex === index && !choice.isAnswer;
+                const style = isCorrectAnswer
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                  : isChosenWrong
+                    ? "border-rose-300 bg-rose-50 text-rose-700"
+                    : "border-slate-200 bg-white text-slate-900 hover:bg-slate-50";
+
+                return (
+                  <button
+                    key={choice.id + index}
+                    ref={(el) => (buttonRefs.current[index] = el)}
+                    onClick={() => handleChoice(choice, index)}
+                    disabled={locked}
+                    className={`rounded-2xl border p-4 text-center transition text-xl font-semibold shadow-sm outline-none focus:ring-2 focus:ring-slate-300 ${style}`}
+                  >
+                    <div className="text-xs font-medium text-slate-500">{choicePositions[index]}</div>
+                    <div className="mt-2 break-keep">{choice.jp}</div>
+                    <div className="mt-2 text-xs text-slate-400">{index === 0 ? "←" : index === 1 ? "↑" : "→"}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className={`mt-5 min-h-[56px] rounded-2xl border px-4 py-3 text-sm md:text-base font-medium ${
+              feedback.type === "correct"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : feedback.type === "wrong"
+                  ? "border-rose-200 bg-rose-50 text-rose-700"
+                  : "border-slate-200 bg-slate-50 text-slate-500"
+            }`}>
+              {feedback.text || "정답을 고르면 일본어 음성이 재생됩니다."}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                onClick={() => {
+                  setQuestionCount((prev) => prev + 1);
+                  goNext();
+                }}
+                className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                다음 문제
+              </button>
+              <button
+                onClick={resetQuiz}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                초기화
+              </button>
+            </div>
+          </section>
+
+          <aside className="rounded-3xl border border-slate-200 bg-slate-50 p-5 md:p-6">
+            <h2 className="text-lg font-bold text-slate-900">현재 설정</h2>
+            <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-base font-bold text-slate-900">오답 실시간 분석</h3>
+                <div className="text-xs text-slate-500">누적 반영</div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-3 gap-3">
+                <div className="rounded-2xl bg-slate-50 p-3 border border-slate-200">
+                  <div className="text-xs text-slate-500">시도 단어</div>
+                  <div className="mt-1 text-xl font-bold text-slate-900">{analysis.attemptedCount}</div>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-3 border border-slate-200">
+                  <div className="text-xs text-slate-500">총 풀이</div>
+                  <div className="mt-1 text-xl font-bold text-slate-900">{analysis.totalAttempts}</div>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-3 border border-slate-200">
+                  <div className="text-xs text-slate-500">전체 정답률</div>
+                  <div className="mt-1 text-xl font-bold text-slate-900">
+                    {analysis.overallAccuracy === null ? "-" : `${analysis.overallAccuracy}%`}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="font-semibold text-slate-900">자주 틀리는 단어</div>
+                  <div className="text-xs text-slate-500">오답 수 기준</div>
+                </div>
+                <div className="mt-3 space-y-3">
+                  {analysis.difficultWords.length === 0 ? (
+                    <div className="text-sm text-slate-500">아직 누적 데이터가 없습니다.</div>
+                  ) : (
+                    analysis.difficultWords.map((item, idx) => {
+                      const maxWrong = Math.max(...analysis.difficultWords.map((word) => word.wrongCount), 1);
+                      const width = Math.max(10, Math.round((item.wrongCount / maxWrong) * 100));
+                      return (
+                        <div key={item.id}>
+                          <div className="flex items-center justify-between gap-3 text-sm">
+                            <div className="min-w-0">
+                              <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[11px] font-bold text-white">{idx + 1}</span>
+                              <span className="font-semibold text-slate-900">{item.jp}</span>
+                              <span className="ml-2 text-slate-500">{item.ko}</span>
+                            </div>
+                            <div className="shrink-0 text-xs text-slate-500">오답 {item.wrongCount} · 정답률 {item.accuracy ?? 0}%</div>
+                          </div>
+                          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+                            <div className="h-full rounded-full bg-rose-400" style={{ width: `${width}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="font-semibold text-slate-900">잘 혼동하는 단어</div>
+                  <div className="text-xs text-slate-500">오답 선택 조합</div>
+                </div>
+                <div className="mt-3 space-y-3">
+                  {analysis.confusionPairs.length === 0 ? (
+                    <div className="text-sm text-slate-500">혼동 패턴이 쌓이면 여기에 표시됩니다.</div>
+                  ) : (
+                    analysis.confusionPairs.map((pair, idx) => {
+                      const maxCount = Math.max(...analysis.confusionPairs.map((item) => item.count), 1);
+                      const width = Math.max(10, Math.round((pair.count / maxCount) * 100));
+                      return (
+                        <div key={pair.key}>
+                          <div className="flex items-start justify-between gap-3 text-sm">
+                            <div className="min-w-0">
+                              <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-700 text-[11px] font-bold text-white">{idx + 1}</span>
+                              <div className="inline text-slate-900">
+                                <span className="font-semibold">정답 {pair.answer.jp}</span>
+                                <span className="mx-2 text-slate-400">↔</span>
+                                <span className="font-semibold">선택 {pair.picked.jp}</span>
+                              </div>
+                              <div className="mt-1 text-xs text-slate-500">{pair.answer.ko} / {pair.picked.ko}</div>
+                            </div>
+                            <div className="shrink-0 text-xs text-slate-500">{pair.count}회</div>
+                          </div>
+                          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+                            <div className="h-full rounded-full bg-amber-400" style={{ width: `${width}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  );
+}
