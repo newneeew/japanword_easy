@@ -255,12 +255,6 @@ col_quiz, col_analysis = st.columns([1.1, 0.9], gap="large")
 
 # ── Quiz Column ──────────────────────────────────────────────────────────────
 with col_quiz:
-    # Header stats
-    hc1, hc2, hc3 = st.columns(3)
-    hc1.markdown(f"**문제 {st.session_state.question_count}**")
-    hc2.markdown(f"정답 **{st.session_state.correct}**")
-    hc3.markdown(f"오답 **{st.session_state.wrong}**")
-
     # Question display
     st.markdown(
         f"""
