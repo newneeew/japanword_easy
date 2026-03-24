@@ -17,7 +17,7 @@ st.set_page_config(page_title="일본어 단어 퀴즈", page_icon="🇯🇵", l
 # ── DB init & vocab load ─────────────────────────────────────────────────────
 init_db()
 
-ACTIVE_CHAPTER = "ch_12"
+ACTIVE_CHAPTER = "ch_15"
 
 
 @st.cache_data
